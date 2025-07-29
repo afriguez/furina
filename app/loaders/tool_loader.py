@@ -61,4 +61,7 @@ def load_tools() -> tuple[dict[str, Any], list[dict[str, Any]]]:
                 except Exception as e:
                     print(f"[TOOLS] [ERROR] Failed to instantiate {class_name} in {filename}: {e}")
 
+    print(f"[TOOLS] Found {len(tool_registry)} tool{'s' if 0 < len(tool_registry) > 1 else ''}.")
+    print(f"[TOOLS] Available tools: ", list(tool_registry.keys()))
+
     return tool_registry, tool_desc_list

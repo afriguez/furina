@@ -12,7 +12,6 @@ _companions: dict[str, Companion] | None = None
 
 def get_context():
     registry, desc_list = load_tools()
-    print(f"[TOOLS] {len(registry)} Available tools: ", list(registry.keys()))
 
     global _companions
     if _companions is None:
