@@ -6,7 +6,7 @@ from typing import Any
 
 _ENTRYPOINTS_DIRS = [
     "./entrypoints",
-    os.path.expanduser("~/.config/furina/tools")
+    os.path.expanduser("~/.config/furina/entrypoints")
 ]
 
 async def load_entrypoints(context: dict[str, Any]) -> list[Awaitable[Any]]:
