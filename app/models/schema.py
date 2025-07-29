@@ -41,4 +41,5 @@ class CompanionConfig:
 
 @dataclass
 class Config:
+    timezone: str
     companions: dict[str, CompanionConfig]
