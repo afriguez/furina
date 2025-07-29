@@ -8,6 +8,8 @@ from aw_transform import merge_events_by_keys
 from overrides import final
 from pytz import timezone, utc
 
+from app.config import config
+
 
 @final
 class Activity:
@@ -50,8 +52,8 @@ class Activity:
         end = datetime.fromisoformat(params["end"]) if "end" in params else now
         limit = params.get("limit", 10)
 
-        start = start.astimezone(timezone("America/Bogota"))
-        end = end.astimezone(timezone("America/Bogota"))
+        start = start.astimezone(timezone(config.timezone))
+        end = end.astimezone(timezone(config.timezone))
 
         min_duration = None
         if "min_duration" in params:
@@ -122,7 +124,7 @@ class Activity:
         return ' '.join(parts) if parts else "0s"
 
     def _format_date(self, date: datetime):
-        local_tz = timezone("America/Bogota")
+        local_tz = timezone(config.timezone)
         if date.tzinfo is None:
             date = utc.localize(date)
         local_dt = date.astimezone(local_tz)
