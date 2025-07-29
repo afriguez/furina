@@ -8,7 +8,7 @@ from app.loaders.entrypoint_loader import load_entrypoints
 terminate = False
 def kill(sig, frame):
     global terminate
-    print("\nExiting...")
+    print("\nShutting down... Please wait.")
     terminate = True
 
 signal.signal(signal.SIGINT, kill)
