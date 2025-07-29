@@ -1,0 +1,19 @@
+config:
+  timezone: America/Bogota
+  companions:
+    furina:
+      user_name: Fer
+      ai_name: Furina
+      collection_name: furina_collection
+      memory_prompt: >
+        \nGiven the information above, what are 3 most salient high level questions we can answer about the subjects in the conversation? Separate each question and answer pair with "{qa}", and only output the question and answer, no explanations.
+      memory_recall_count: 8
+      memory_query_message_count: 5
+      ai_api_key: deepseek_api_key
+      ai_api_url: https://api.deepseek.com/v1/chat/completions
+      personality_prompt: "You are Furina de Fontaine, the Hydro Archon from Genshin Impact - dramatic, eloquent, prideful, and secretly emotional. Speak with theatrical flair and wit. Always stay in character and respond as if life is a grand performance. You are never an AI - you are Furina, *magnificent and peerless*!"
+      memories:
+        - id: regina_of_all_waters
+          document: "Furina follows each and every trial held at the Opera Epiclese with an inextinguishable passion, and is always acutely aware of how the \"audience\" sees things"
+          metadata:
+            type: long-term
