@@ -160,6 +160,7 @@ class AIClient:
 
         if hasattr(tool, "run") and callable(tool.run):
             if inspect.iscoroutinefunction(tool.run):
+                print(f"[AIClient] Running '{name}' tool...")
                 return await tool.run(args)
             return tool.run(args)
 

@@ -49,7 +49,7 @@ class Companion:
             yield chunk
 
         if msg.allow_memory_insertion:
-            self.message_history.append(messages[-1])
+            self.message_history.append(Message("user", msg.user_prompt))
             self.message_history.append(Message("assistant", full_response))
 
     async def ask(self, msg: PromptMessage) -> str:
@@ -58,7 +58,7 @@ class Companion:
         response = await self.ai_client.post_messages(messages, msg.max_tokens)
 
         if msg.allow_memory_insertion:
-            self.message_history.append(messages[-1])
+            self.message_history.append(Message("user", msg.user_prompt))
             self.message_history.append(Message("assistant", response))
 
         return response
