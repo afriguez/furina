@@ -10,7 +10,6 @@ from app.models.schema import CompanionConfig, Message, PromptMessage
 class Companion:
     def __init__(self, config: CompanionConfig, client: AIClient, memory: Memory) -> None:
         self.config = config
-        self.thinking = False
         self.ai_client = client
         self.memory = memory
         self.message_history: list[Message] = []
@@ -41,44 +40,35 @@ class Companion:
         return messages
 
 
-    def ask_stream(self, msg: PromptMessage):
-        self.thinking = True
+    async def ask_stream(self, msg: PromptMessage):
         messages = self._build_messages(msg)
 
         full_response = ""
-        for chunk in self.ai_client.post_messages_stream(messages, msg.max_tokens):
+        async for chunk in self.ai_client.post_messages_stream(messages, msg.max_tokens):
             full_response += chunk
             yield chunk
 
         if msg.allow_memory_insertion:
             self.message_history.append(messages[-1])
             self.message_history.append(Message("assistant", full_response))
-            self.reflect()
 
-        self.thinking = False
-
-
-    def ask(self, msg: PromptMessage) -> str:
-        self.thinking = True
+    async def ask(self, msg: PromptMessage) -> str:
         messages = self._build_messages(msg)
 
-        response = self.ai_client.post_messages(messages, msg.max_tokens)
+        response = await self.ai_client.post_messages(messages, msg.max_tokens)
 
         if msg.allow_memory_insertion:
             self.message_history.append(messages[-1])
             self.message_history.append(Message("assistant", response))
-            self.reflect()
 
-        self.thinking = False
         return response
 
-
-    def reflect(self, max_tokens: int = 200):
-        self.thinking = True
+    async def reflect(self, max_tokens: int = 200):
         if self._processed_count > len(self.message_history):
             self._processed_count = 0
 
         if len(self.message_history) - self._processed_count >= 10:
+            print(f"[COMPANION] [{self.config.ai_name}] Reflecting...")
             msgs = deepcopy(self.message_history[-(len(self.message_history) - self._processed_count):])
 
             for msg in msgs:
@@ -91,21 +81,21 @@ class Companion:
             for msg in msgs:
                 chat_section += msg.content
 
-            raw_memories = self.ai_client.post_messages(
+            raw_memories = await self.ai_client.post_messages(
                 [Message("user", chat_section + self.config.memory_prompt)],
                 max_tokens
             )
+            new_memories = raw_memories.split("{qa}")
 
-            for memory in raw_memories.split("{qa}"):
+            for memory in new_memories:
                 memory = memory.strip()
                 if memory != "":
                     self.memory.create_memory([memory])
 
             self._processed_count = len(self.message_history)
-            self.thinking = False
+            print(f"[COMPANION] [{self.config.ai_name}] has {len(new_memories)} new memories.")
 
     def get_knowledge_for(self, prompt: str) -> str:
-        self.thinking = True
         memories = self.memory.collection.query(
                 query_texts=prompt,
                 n_results=self.config.memory_recall_count
@@ -129,11 +119,9 @@ class Companion:
                     text += self.config.ai_name + ":" + msg.content + "\n"
             text += "End of conversation section.\n"
 
-        self.thinking = False
         return text
 
     def get_knowledge_section(self) -> str:
-        self.thinking = True
         query = ""
         for msg in self.message_history[-self.config.memory_query_message_count:]:
             if msg.role == "user" and msg.content != "":
@@ -153,5 +141,4 @@ class Companion:
                 text += memories["documents"][0][i] + "\n"
             text += "End of knowledge section\n"
 
-        self.thinking = False
         return text

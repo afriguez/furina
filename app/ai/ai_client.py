@@ -1,10 +1,12 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
+import inspect
 from dataclasses import asdict
 import json
 from typing import Any
-import requests
+import httpx
 
 from app.models.schema import Message
+
 
 class AIClient:
     def __init__(self, api_url: str, api_key: str, tool_registry: Any, tools: list[dict[str, Any]]) -> None:
@@ -13,7 +15,7 @@ class AIClient:
         self.tools = tools
         self.registry = tool_registry
 
-    def post_messages_stream(self, messages: list[Message], max_tokens: int) -> Generator[str, None, None]:
+    async def post_messages_stream(self, messages: list[Message], max_tokens: int) -> AsyncGenerator[str, None]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -41,68 +43,74 @@ class AIClient:
                 "tools": self.tools if self.tools else None
             }
 
-        def stream_and_handle(msgs):
+        async def stream_and_handle(msgs):
             tool_calls = []
             collecting_tool_calls = False
 
-            with requests.post(self.api_url, headers=headers, json=make_payload(msgs), stream=True) as response:
-                for line in response.iter_lines():
-                    if line:
-                        if line.startswith(b"data: "):
-                            line = line[6:]
-                        if line.strip() == b"[DONE]":
-                            break
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream("POST", self.api_url, headers=headers, json=make_payload(msgs)) as response:
+                    async for line in response.aiter_lines():
+                        if line:
+                            if line.startswith("data: "):
+                                line = line[6:]
+                            if line.strip() == "[DONE]":
+                                break
 
-                        try:
-                            chunk = json.loads(line)
-                            choice = chunk["choices"][0]
-                            delta = choice.get("delta", {})
+                            try:
+                                chunk = json.loads(line)
+                                choice = chunk["choices"][0]
+                                delta = choice.get("delta", {})
 
-                            if "tool_calls" in delta:
-                                collecting_tool_calls = True
-                                for tc in delta["tool_calls"]:
-                                    index = tc["index"]
-                                    if len(tool_calls) <= index:
-                                        tool_calls.append(tc)
-                                    else:
-                                        tool_calls[index] = merge_tool_call(tool_calls[index], tc)
+                                if "tool_calls" in delta:
+                                    collecting_tool_calls = True
+                                    for tc in delta["tool_calls"]:
+                                        index = tc["index"]
+                                        if len(tool_calls) <= index:
+                                            tool_calls.append(tc)
+                                        else:
+                                            tool_calls[index] = merge_tool_call(tool_calls[index], tc)
 
-                            elif "content" in delta and not collecting_tool_calls:
-                                yield delta["content"]
+                                elif "content" in delta and not collecting_tool_calls:
+                                    yield delta["content"]
 
-                            if choice.get("finish_reason") == "tool_calls":
-                                tool_messages = []
-                                assistant_msg = {
-                                    "role": "assistant",
-                                    "tool_calls": tool_calls
-                                }
-                                msgs.append(assistant_msg)
+                                if choice.get("finish_reason") == "tool_calls":
+                                    tool_messages = []
+                                    assistant_msg = {
+                                        "role": "assistant",
+                                        "tool_calls": tool_calls
+                                    }
+                                    msgs.append(assistant_msg)
 
-                                for call in tool_calls:
-                                    fn_name = call["function"]["name"]
-                                    arguments = json.loads(call["function"]["arguments"])
-                                    call_id = call["id"]
+                                    for call in tool_calls:
+                                        fn_name = call["function"]["name"]
+                                        arguments = json.loads(call["function"]["arguments"])
+                                        call_id = call["id"]
 
-                                    tool_output = self.run_tool(fn_name, arguments)
+                                        tool_output = await self.run_tool(fn_name, arguments)
+                                        tool_messages.append({
+                                            "role": "tool",
+                                            "tool_call_id": call_id,
+                                            "content": tool_output
+                                        })
 
-                                    tool_messages.append({
-                                        "role": "tool",
-                                        "tool_call_id": call_id,
-                                        "content": tool_output
-                                    })
+                                    msgs.extend(tool_messages)
 
-                                msgs.extend(tool_messages)
+                                    async for item in stream_and_handle(msgs):
+                                        yield item
+                                    return
 
-                                yield from stream_and_handle(msgs)
-                                return
+                            except Exception as e:
+                                print(f"[AIClient] [STREAM ERROR] {e}")
 
-                        except Exception as e:
-                            print(f"[AIClient STREAM ERROR] {e}")
+        async for item in stream_and_handle(messages):
+            yield item
 
-        yield from stream_and_handle(messages)
+    async def post_messages(self, messages: list[Message], max_tokens: int) -> str:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
 
-    def post_messages(self, messages: list[Message], max_tokens: int) -> str:
-        print(messages)
         data = {
             "max_tokens": max_tokens,
             "model": "deepseek-chat",
@@ -113,41 +121,46 @@ class AIClient:
             "tools": self.tools if self.tools else None
         }
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        async with httpx.AsyncClient(timeout=120) as client:
+            try:
+                response = await client.post(self.api_url, headers=headers, json=data)
+                response_json = response.json()
+                message_data = response_json["choices"][0]["message"]
 
-        new_messages = messages.copy()
+                if "tool_calls" in message_data:
+                    tool_messages = []
+                    for tool_call in message_data["tool_calls"]:
+                        function_name = tool_call["function"]["name"]
+                        arguments = json.loads(tool_call["function"]["arguments"])
+                        tool_call_id = tool_call["id"]
 
-        response = requests.post(self.api_url, headers=headers, json=data)
-        print(response.json())
-        message_data = response.json()["choices"][0]["message"]
+                        tool_result = await self.run_tool(function_name, arguments)
 
-        if "tool_calls" in message_data:
-            tool_messages = []
-            for tool_call in message_data["tool_calls"]:
-                function_name = tool_call["function"]["name"]
-                arguments = json.loads(tool_call["function"]["arguments"])
-                tool_call_id = tool_call["id"]
+                        tool_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": tool_result
+                        })
 
-                tool_result = self.run_tool(function_name, arguments)
+                    new_messages = messages.copy()
+                    new_messages.append(message_data)
+                    new_messages.extend(tool_messages)
 
-                tool_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": tool_result
-                })
+                    return await self.post_messages(new_messages, max_tokens)
 
-            new_messages.append(message_data)
-            new_messages.extend(tool_messages)
+                return message_data["content"]
+            except httpx.RequestError as e:
+                print("[AIClient] [ERROR] ", e)
+                raise
 
-            return self.post_messages(new_messages, max_tokens)
+    async def run_tool(self, name: str, args: dict[str, Any]) -> str:
+        tool = self.registry.get(name)
+        if not tool:
+            return f"[AIClient] [Error] Tool '{name}' not found"
 
-        return message_data["content"]
+        if hasattr(tool, "run") and callable(tool.run):
+            if inspect.iscoroutinefunction(tool.run):
+                return await tool.run(args)
+            return tool.run(args)
 
-    def run_tool(self, name: str, args: dict[str, Any]) -> str:
-        tool = self.registry.get(name, None)
-        if tool == None:
-            return "Error: Tool not found"
-        return tool.run(args)
+        return "[AIClient] [Error] Invalid tool"

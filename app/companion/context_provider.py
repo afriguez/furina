@@ -23,17 +23,18 @@ def get_context():
             companions[name] = companion
         _companions = companions
 
-    def handle_stream(message: str):
+    async def handle_stream(message: str):
         msg = PromptMessage(**json.loads(message))
         name = msg.companion_name.strip().lower()
 
         companion = next((c for c in _companions.values() if c.config.ai_name.lower() == name), None)
         if companion is None:
-            return f"[CONTEXT] [ERROR] Companion '{msg.companion_name}' not found."
-        for chunk in companion.ask_stream(msg):
+            print(f"[CONTEXT] [ERROR] Companion '{msg.companion_name}' not found.")
+            return
+        async for chunk in companion.ask_stream(msg):
             yield chunk
 
-    def handle(message: str) -> str:
+    async def handle(message: str) -> str:
         msg = PromptMessage(**json.loads(message))
         name = msg.companion_name.strip().lower()
 
@@ -41,9 +42,9 @@ def get_context():
         if companion is None:
             return f"[CONTEXT] [ERROR] Companion '{msg.companion_name}' not found."
 
-        return companion.ask(msg)
+        return await companion.ask(msg)
 
-    return {
+    return _companions, {
         "handle_stream": handle_stream,
         "handle": handle
     }
