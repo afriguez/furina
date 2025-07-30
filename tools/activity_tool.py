@@ -46,7 +46,7 @@ class Activity:
             }
         }
 
-    def run(self, params: dict[str, Any]) -> str:
+    async def run(self, params: dict[str, Any]) -> str:
         now = datetime.now()
         start = datetime.fromisoformat(params["start"]) if "start" in params else now - timedelta(days=1)
         end = datetime.fromisoformat(params["end"]) if "end" in params else now
@@ -136,6 +136,8 @@ class Activity:
         for i in events:
             data = i.data
             parts: list[str] = []
+            if "status" in data and data["status"] == "not-afk":
+                continue
             for k, v in data.items():
                 if k == "branch":
                     continue
