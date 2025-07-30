@@ -38,8 +38,19 @@ async def load_entrypoints(context: dict[str, Any]) -> list[Awaitable[Any]]:
             start_fn = getattr(module, "start", None)
             if asyncio.iscoroutinefunction(start_fn):
                 try:
-                    task = await start_fn(context)
-                    tasks.append(task)
+                    result = await start_fn(context)
+
+                    if not isinstance(result, Awaitable):
+                        raise TypeError(
+                            f"[ENTRYPOINT] [ERROR] `{filename}` start(ctx) returned non-awaitable: {type(result).__name__}"
+                        )
+
+                    if isinstance(result, asyncio.AbstractServer):
+                        raise TypeError(
+                            f"[ENTRYPOINT] [ERROR] `{filename}` returned `asyncio.Server`, which must be managed manually."
+                        )
+
+                    tasks.append(result)
                     print(f"[ENTRYPOINT] Loaded {filename} from {entry_dir}")
                 except Exception as e:
                     print(f"[ENTRYPOINT] [ERROR] Starting {filename} from {entry_dir}: {e}")
