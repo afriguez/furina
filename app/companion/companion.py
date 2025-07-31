@@ -15,6 +15,9 @@ class Companion:
         self.message_history: list[Message] = []
         self._processed_count = 0
 
+    def _get_user(self, msg: PromptMessage):
+        return msg.user if msg.user else self.config.user_name
+
     def _build_messages(self, msg: PromptMessage) -> list[Message]:
         messages: list[Message] = []
 
@@ -34,11 +37,14 @@ class Companion:
             metadata += "\nEnd of metadata section\n"
 
         user_prompt = self.get_knowledge_for(msg.user_prompt) if msg.allow_memory_lookup else ""
-        user_message = Message("user", metadata + user_prompt + msg.user_prompt)
+
+        user_message = Message(
+            role="user",
+            content=metadata + user_prompt + self._get_user(msg) + ": " + msg.user_prompt,
+        )
 
         messages.append(user_message)
         return messages
-
 
     async def ask_stream(self, msg: PromptMessage):
         messages = self._build_messages(msg)
@@ -49,16 +55,17 @@ class Companion:
             yield chunk
 
         if msg.allow_memory_insertion:
-            self.message_history.append(Message("user", msg.user_prompt))
+            self.message_history.append(Message("user", self._get_user(msg) + ": " + msg.user_prompt))
             self.message_history.append(Message("assistant", full_response))
 
     async def ask(self, msg: PromptMessage) -> str:
+        msg.user = self._get_user(msg)
         messages = self._build_messages(msg)
 
         response = await self.ai_client.post_messages(messages, msg.max_tokens)
 
         if msg.allow_memory_insertion:
-            self.message_history.append(Message("user", msg.user_prompt))
+            self.message_history.append(Message("user", self._get_user(msg) + ": " + msg.user_prompt))
             self.message_history.append(Message("assistant", response))
 
         return response
@@ -73,7 +80,7 @@ class Companion:
 
             for msg in msgs:
                 if msg.role == "user" and msg.content != "":
-                    msg.content = self.config.user_name + ":" + msg.content + "\n"
+                    msg.content = msg.content + "\n"
                 elif msg.role == "assistant" and msg.content != "":
                     msg.content = self.config.ai_name + ":" + msg.content + "\n"
 
@@ -114,7 +121,7 @@ class Companion:
             text += "Latest conversation messages:\n"
             for msg in not_processed:
                 if msg.role == "user" and msg.content != "":
-                    text += self.config.user_name + ":" + msg.content + "\n"
+                    text += msg.content + "\n"
                 elif msg.role == "assistant" and msg.content != "":
                     text += self.config.ai_name + ":" + msg.content + "\n"
             text += "End of conversation section.\n"

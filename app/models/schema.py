@@ -14,6 +14,7 @@ class PromptMessage:
     metadata: dict[str, str]
     max_tokens: int
     stream: bool
+    user: str | None = None
 
 @dataclass
 class Message:
