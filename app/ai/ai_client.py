@@ -100,7 +100,7 @@ class AIClient:
                                     return
 
                             except Exception as e:
-                                print(f"[AIClient] [STREAM ERROR] {e}")
+                                print(f"[AI CLIENT] [STREAM ERROR] {e}")
 
         async for item in stream_and_handle(messages):
             yield item
@@ -150,18 +150,24 @@ class AIClient:
 
                 return message_data["content"]
             except httpx.RequestError as e:
-                print("[AIClient] [ERROR] ", e)
+                print("[AI CLIENT] [ERROR] ", e)
                 raise
 
     async def run_tool(self, name: str, args: dict[str, Any]) -> str:
         tool = self.registry.get(name)
         if not tool:
-            return f"[AIClient] [Error] Tool '{name}' not found"
+            return f"[AI CLIENT] [Error] Tool '{name}' not found"
 
         if hasattr(tool, "run") and callable(tool.run):
+            log = f"[AI CLIENT] Running [{name}] with ("
+            for k, v in args.items():
+                log += f"\n    {k}={v}"
+            if args:
+                log += "\n"
+            log += ")"
+            print(log)
             if inspect.iscoroutinefunction(tool.run):
-                print(f"[AIClient] Running '{name}' tool...")
                 return await tool.run(args)
             return tool.run(args)
 
-        return "[AIClient] [Error] Invalid tool"
+        return "[AI CLIENT] [Error] Invalid tool"
