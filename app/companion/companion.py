@@ -120,25 +120,3 @@ class Companion:
             text += "End of conversation section.\n"
 
         return text
-
-    def get_knowledge_section(self) -> str:
-        query = ""
-        for msg in self.message_history[-self.config.memory_query_message_count:]:
-            if msg.role == "user" and msg.content != "":
-                query += self.config.user_name + ":" + msg.content + "\n"
-            elif msg.role == "assistant" and msg.content != "":
-                query += self.config.ai_name + ":" + msg.content + "\n"
-
-        memories = self.memory.collection.query(
-            query_texts=query,
-            n_results=self.config.memory_recall_count
-        )
-
-        text = ""
-        if len(memories["ids"][0]):
-            text += f"{self.config.ai_name} knows these things:\n"
-            for i in range(len(memories["ids"][0])):
-                text += memories["documents"][0][i] + "\n"
-            text += "End of knowledge section\n"
-
-        return text
