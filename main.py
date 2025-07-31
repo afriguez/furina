@@ -1,6 +1,8 @@
 import asyncio
 import signal
 import sys
+from asyncio.tasks import Task
+from typing import Any
 
 from app.companion.companion import Companion
 from app.companion.context_provider import get_context
@@ -27,8 +29,7 @@ async def run_reflection_loop(companion: Companion):
 
 async def main():
     companions, ctx = get_context()
-    tasks = await load_entrypoints(ctx)
-    print(tasks)
+    tasks: list[Task[Any]] = await load_entrypoints(ctx)
 
     reflection_tasks = [
         asyncio.create_task(run_reflection_loop(companions[c]))

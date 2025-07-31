@@ -1,3 +1,4 @@
+from asyncio.tasks import Task
 from collections.abc import Awaitable
 import importlib.util
 import os
@@ -9,7 +10,7 @@ _ENTRYPOINTS_DIRS = [
     os.path.expanduser("~/.config/furina/entrypoints")
 ]
 
-async def load_entrypoints(context: dict[str, Any]) -> list[Awaitable[Any]]:
+async def load_entrypoints(context: dict[str, Any]) -> list[Task[Any]]:
     tasks = []
 
     for entry_dir in _ENTRYPOINTS_DIRS:
